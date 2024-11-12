@@ -1,0 +1,215 @@
+---
+title: "Analiza danych materiałów do baterii"
+author: "Krzysztof Dolny"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+---
+<style>
+h1 { font-size: 2em; }   
+h2 { font-size: 1.5em; }
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache =TRUE)
+```
+
+# 1. Podsumowanie
+
+W analizie zgromadzonych danych dotyczących materiałów do baterii omówiono najważniejsze wskaźniki, takie jak formuły chemiczne, pojemność, gęstość energii oraz stabilność. Formuły chemiczne baterii są bardzo zróżnicowane, jednakże możemy w nich wyróżnić kilka dominujących pierwiastków. Dominującym materiałem będącym głównym jonem baterii jest lit, który jest stosowany w ponad 50% baterii. Jednakże alternatywne materiały, jak magnez czy wapń, oferują zwiększoną stabilność, co może przynieść korzyści w wybranych zastosowaniach – przykładowo gdy od baterii wymagana jest dłuższa żywotność lub częste ładowania. Analiza korelacji pozwoliła określić, które z właściwości baterii bezpośrednio na siebie wpływają, co może mieć kluczowe znaczenie przy ich projektowaniu. Uzyskane wyniki mogą posłużyć do opracowania trwalszych i bardziej efektywnych materiałów bateryjnych dostosowanych do różnorodnych zastosowań.
+
+# 2. Raport
+
+## 2.1 Konfiguracja środowiska
+Poniższy kod pozwala na załadowanie wykorzystywanych bibliotek, zapewnia powtarzalność wyników przy każdym uruchomieniu raportu, a także wczytuje do programu zbiór danych dotyczący baterii. 
+```{r configure_environment, echo=TRUE, warning=FALSE, message=FALSE}
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(corrplot)
+library(gridExtra)
+library(caret)
+library(broom)
+
+set.seed(123)
+baterie_data <- read.csv("mp_batteries.csv")
+```
+
+## 2.2 Podstawowwe statystyki zbioru danych
+``` {r basic_stats, echo=FALSE}
+total_missing <- sum(is.na(baterie_data))
+
+num_rows <- nrow(baterie_data)
+num_columns <- ncol(baterie_data)
+
+unique_batteries <- unique(baterie_data$Battery.ID)
+unique_formulas <- unique(baterie_data$Battery.Formula)
+unique_ions <- unique(baterie_data$Working.Ion)
+
+summary_data <- data.frame(
+  "Kategoria" = c("Liczba rodzaji baterii", "Unikalne wzory chemiczne materiału baterii", "Liczba unikalnych jonów głównych transportująca ładunek "),
+  "Liczba" = c(length(unique_batteries), length(unique_formulas), length(unique_ions))
+)
+
+kable(summary_data, col.names = c("Kategoria", "Liczba"), caption = "Unikalne właściwości baterii")
+```
+
+Zbiór danych zawiera informacje o `r num_rows` różnych bateriach opisanych przy pomocy `r num_columns` atrybutów. Ponadto zbiór danych zawiera `r total_missing` brakujących wartości "NA". Dane te pozwalają na analizę zróżnicowanych parametrów i materiałów, wykorzystywanych w konstrukcji baterii.
+
+## 2.3 Popularne formuły chemiczne i materiały stosowane w  bateriach
+
+```{r popular_formulas, echo=FALSE}
+top5_formulas <- baterie_data %>%
+  group_by(Battery.Formula) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  slice_head(n = 5)
+
+kable(top5_formulas, col.names = c("Battery Formula", "Liczba wystąpień"), caption = "5 najpopularniejszych formuł chemicznych materiałów baterii")
+```
+
+Analiza pięciu najczęściej występujących formuł chemicznych ujawnia znaczącą przewagę baterii litowych, co odzwierciedla ich szerokie zastosowanie w przemyśle.
+
+```{r unique_counts, echo=FALSE}
+ion_counts <- table(baterie_data$Working.Ion)
+ion_counts_df <- as.data.frame(ion_counts)
+colnames(ion_counts_df) <- c("Working.Ion", "Count")
+
+ion_counts_df <- ion_counts_df %>%
+  mutate(label = paste("Jon:", Working.Ion, "<br>Liczba wystąpień:", Count))
+
+plot <- ggplot(ion_counts_df, aes(x = reorder(Working.Ion, Count), y = Count, text = label)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Częstość występowania poszczególnych jonów głównych transportujących ładunek", x = "Główny jon", y = "Liczba wystąpień")
+
+ggplotly(plot, tooltip = "text")
+
+```
+
+Lit jest najczęściej występującym jonem transportującym ładunek, obecnym w ponad połowie zbadanych baterii.. Często używane są także wapń, magnez, cynk i sód.
+
+## 2.4 Analiza wartości atrybutów
+
+```{r histogram_area, echo=FALSE, warning=FALSE}
+# Histogram dla Average Voltage
+plot1 <- ggplot(baterie_data, aes(x = Average.Voltage)) +
+  geom_histogram(binwidth = 0.1, fill = "steelblue", color = "steelblue", alpha = 0.7) +
+  labs(title = "Histogram wartości średniego napięcia", 
+       x = "Średnie napięcie [V]", 
+       y = "") +
+  theme_minimal() +
+  xlim(-5, 10)
+
+# Histogram dla Gravimetric Capacity
+plot3 <- ggplot(baterie_data, aes(x = Gravimetric.Capacity)) +
+  geom_histogram(binwidth = 10, fill = "steelblue", color = "steelblue", alpha = 0.7) +
+  labs(title = "Histogram pojemności grawimetrycznej",
+       x = "Pojemność grawimetryczna [mAh/g]", 
+       y = "") +
+  theme_minimal() +
+  xlim(-5, 750)
+
+# Histogram dla Volumetric Capacity
+plot4 <- ggplot(baterie_data, aes(x = Volumetric.Capacity)) +
+  geom_histogram(binwidth = 10, fill = "steelblue", color = "steelblue", alpha = 0.7) +
+  labs(title = "Histogram pojemności wolumetrycznej", 
+       x = "Pojemność wolumetryczna [mAh/cm^3]", 
+       y = "") +
+  theme_minimal() +
+  xlim(-5, 2500)
+
+# Histogram dla Gravimetric Energy
+plot5 <- ggplot(baterie_data, aes(x = Gravimetric.Energy)) +
+  geom_histogram(binwidth = 10, fill = "steelblue", color = "steelblue", alpha = 0.7) +
+  labs(title = "Histogram gęstości energii", 
+       x = "Gęstość energii [Wh/kg]", 
+       y = "") +
+  theme_minimal() +
+  xlim(-1000, 3000)
+
+# Histogram dla Volumetric Energy
+plot6 <- ggplot(baterie_data, aes(x = Volumetric.Energy)) +
+  geom_histogram(binwidth = 10, fill = "steelblue", color = "steelblue", alpha = 0.7) +
+  labs(title = "Histogram gęstości energii", 
+       x = "Gęstość energii [Wh/L]", 
+       y = "") +
+  theme_minimal() +
+  xlim(-2500, 7500)
+
+layout <- rbind(c(1, 1), 
+                c(2, 3), 
+                c(4, 5))
+
+grid.arrange(plot1, plot3, plot4, plot5, plot6, layout_matrix = layout)
+```
+
+W histogramach parametrów baterii dostrzegamy, że średnie napięcie oscyluje w zakresie 1,5–5 V, co jest typowe dla standardowych baterii litowych. Pojemność grawimetryczna waha się głównie między 50 a 300 mAh/g, natomiast pojemność wolumetryczna sięga wartości do 2500 mAh/cm³. Warto zwrócić uwagę na obecność wartości ujemnych w niektórych wskaźnikach gęstości energii, co może sugerować obecność nieprawidłowych danych w zbiorze, które usunięto z dalszej analizy.
+
+```{r update_data, eval=TRUE}
+baterie_data <- baterie_data %>%
+  filter(Gravimetric.Energy > 0, Volumetric.Energy > 0)
+```
+
+## 2.5 Korelacja pomiędzy zmiennymi
+
+```{r correlation, echo=FALSE}
+selected_vars <- baterie_data %>% 
+  select(Average.Voltage, 
+         Gravimetric.Capacity, 
+         Volumetric.Capacity, 
+         Gravimetric.Energy, 
+         Volumetric.Energy, 
+         Max.Delta.Volume, 
+         Max.Voltage.Step, 
+         Stability.Charge, 
+         Stability.Discharge)
+
+cor_matrix <- cor(selected_vars, use = "complete.obs")
+
+corrplot(cor_matrix, method = "circle", type = "full", 
+         col = colorRampPalette(c("darkblue", "white", "steelblue"))(200), 
+         tl.col = "black", tl.cex = 0.8, 
+         addCoef.col = "black",
+         number.cex = 0.7)
+```
+
+Zaobserwowano silną korelację między atrybutami, które są ze sobą bezpośrednio powiązane, jak pojemność grawimetryczna i wolumetryczna, gdzie współczynnik korelacji wynosi 0,86. Korelacje występują także między wskaźnikami stabilności materiału w stanie naładowanym i rozładowanym, a także między gęstością energii wyrażoną w odniesieniu do masy i objętości baterii. Z kolei w przypadku atrybutów, które nie są bezpośrednio powiązane, obserwujemy słabszą korelację, między wartością średniego napięcia a gęstościami energii.
+
+## 2.6 Stabilność materiału w stanie naładowanym i rozładowanym
+
+```{r stability_charge, echo=FALSE, warning=FALSE, message=FALSE}
+average_stability <- baterie_data %>%
+  group_by(Working.Ion) %>%
+  summarise(Avg_Stability_Charge = mean(Stability.Charge, na.rm = TRUE),
+            Avg_Stability_Discharge = mean(Stability.Discharge, na.rm = TRUE)) %>%
+  arrange(desc(Avg_Stability_Charge))
+
+ggplot(average_stability, aes(x = reorder(Working.Ion, Avg_Stability_Charge))) +
+  geom_point(aes(y = Avg_Stability_Charge, color = "Naładowany"), size = 3) +
+  geom_point(aes(y = Avg_Stability_Discharge, color = "Rozładowany"), size = 3) +
+  geom_line(aes(y = Avg_Stability_Charge, group = Working.Ion, color = "Naładowany")) +
+  geom_line(aes(y = Avg_Stability_Discharge, group = Working.Ion, color = "Rozładowany")) +
+  coord_flip() +
+  labs(title = "Zależność poszczególnych jonów głównych baterii od stabilności",
+       x = "Główny jon",
+       y = "Stabilność",
+       color = "Stan") +
+  scale_color_manual(values = c("Naładowany" = "darkblue", "Rozładowany" = "steelblue")) +
+  theme_minimal()
+```
+
+Jony takie jak Mg, Zn czy Y charakteryzują się wyższą stabilnością niż powszechnie stosowany lit. W kontekście baterii wyższa stabilność oznacza dłuższą żywotność i większą efektywność, co może być szczególnie pożądane w niektórych zastosowaniach, takich jak urządzenia wymagające długotrwałego działania lub częstych cykli ładowania.
+
+# 3. Predykcja właściwości nowych materiałów
+
+```{r prediction, echo=FALSE}
+
+```
+
+# 4. Podsumowanie i wnioski
+
+W analizie materiałów do baterii wyraźnie wyróżniają się pewne trendy. Zdecydowaną dominację w produkcji baterii stanowią formuły wykorzystujące lit, jednak coraz więcej uwagi poświęca się alternatywnym materiałom, takim jak wapń, magnez, czy cynk. W kontekście efektywności energetycznej, widoczna jest duża zmienność w gęstości energii, co może wynikać z różnych metod produkcji oraz zastosowanych materiałów. Z kolei analiza pojemności grawimetrycznej i wolumetrycznej pokazuje różne podejścia w projektowaniu baterii, zależne od ich docelowych zastosowań. Dodatkowo, wskaźniki stabilności materiałów w stanie naładowanym i rozładowanym wskazują, że lit nie jest najstabilniejszym materiałem, stąd też liczne próby wykorzystania innych materiałów.
