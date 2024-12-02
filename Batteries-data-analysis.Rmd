@@ -18,7 +18,7 @@ knitr::opts_chunk$set(cache =TRUE)
 
 # 1. Podsumowanie
 
-W analizie zgromadzonych danych dotyczących materiałów do baterii omówiono najważniejsze wskaźniki, takie jak formuły chemiczne, pojemność, gęstość energii oraz stabilność. Formuły chemiczne baterii są bardzo zróżnicowane, jednakże możemy w nich wyróżnić kilka dominujących pierwiastków. Dominującym materiałem będącym głównym jonem baterii jest lit, który jest stosowany w ponad 50% baterii. Jednakże alternatywne materiały, jak magnez czy wapń, oferują zwiększoną stabilność, co może przynieść korzyści w wybranych zastosowaniach – przykładowo gdy od baterii wymagana jest dłuższa żywotność lub częste ładowania. Analiza korelacji pozwoliła określić, które z właściwości baterii bezpośrednio na siebie wpływają, co może mieć kluczowe znaczenie przy ich projektowaniu. Uzyskane wyniki mogą posłużyć do opracowania trwalszych i bardziej efektywnych materiałów bateryjnych dostosowanych do różnorodnych zastosowań.
+W analizie zgromadzonych danych dotyczących materiałów do baterii omówiono najważniejsze wskaźniki, takie jak formuły chemiczne, pojemność, gęstość energii oraz stabilność. Formuły chemiczne baterii są bardzo zróżnicowane, jednakże możemy w nich wyróżnić kilka dominujących pierwiastków. Dominującym materiałem będącym głównym jonem baterii jest lit, który jest stosowany w ponad 50% baterii. Jednakże alternatywne materiały, jak magnez czy wapń, oferują zwiększoną stabilność, co może przynieść korzyści w wybranych zastosowaniach – przykładowo gdy od baterii wymagana jest dłuższa żywotność lub częste ładowania. Analiza korelacji pozwoliła określić, które z właściwości baterii bezpośrednio na siebie wpływają, co może mieć kluczowe znaczenie przy ich projektowaniu. Opracowano także model regresji liniowej, który  pozwala przewidzieć pojemność grawimetryczną na podstawie pozostałych zmiennych. Uzyskane wyniki mogą posłużyć do opracowania trwalszych i bardziej efektywnych materiałów bateryjnych dostosowanych do różnorodnych zastosowań.
 
 # 2. Raport
 
@@ -206,9 +206,27 @@ Jony takie jak Mg, Zn czy Y charakteryzują się wyższą stabilnością niż po
 
 # 3. Predykcja właściwości nowych materiałów
 
-```{r prediction, echo=FALSE}
+```{r prediction, echo=FALSE, warning=FALSE, message=FALSE}
+train_index <- createDataPartition(baterie_data$Gravimetric.Capacity, p = 0.7, list = FALSE)
+train_data <- baterie_data[train_index, ]
+test_data <- baterie_data[-train_index, ]
 
+model <- lm(Gravimetric.Capacity ~ Average.Voltage + Max.Delta.Volume + Volumetric.Energy, data = train_data)
+
+test_data$Predicted.Gravimetric.Capacity <- predict(model, test_data)
+
+ggplot(test_data, aes(x = Gravimetric.Capacity, y = Predicted.Gravimetric.Capacity)) +
+  geom_point(color = 'darkblue', alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  labs(title = "Predykcja grawimetrycznej pojemności (Gravimetric Capacity)", 
+       x = "Rzeczywista grawimetryczna pojemność [mAh/g]", 
+       y = "Prognozowana grawimetryczna pojemność [mAh/g]") +
+  xlim(0, 1000) +
+  ylim(0, 1000) +  
+  theme_minimal()
 ```
+
+W tej sekcji opracowano model regresji liniowej, który ma na celu przewidywanie grawimetrycznej pojemności baterii na podstawie zmiennych, takich jak: średnie napięcie, maksymalne zmiany objętości oraz pojemność energetyczna. Wykres przedstawia zależność między rzeczywistą grawimetryczną pojemnością, a prognozowaną grawimetryczną pojemnością uzyskaną z modelu regresji. Ciemnoniebieskie punkty reprezentują poszczególne obserwacje, a czerwona linia wskazuje idealną sytuację, w której prognozy dokładnie odpowiadają rzeczywistym wartościom. Większość punktów znajduje się blisko tej linii, co sugeruje, że model dobrze odwzorowuje rzeczywiste wartości. Jednak widać także pewne odchylenia, zwłaszcza w przypadku wyższych wartości grawimetrycznej pojemności.
 
 # 4. Podsumowanie i wnioski
 
