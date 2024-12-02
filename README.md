@@ -18,4 +18,4 @@ R
 2. Compile the file to generate the HTML report.
 
 ### Result
-As a result, the program generates an HTML report. You can open the `Batteries-data-analysis.html` file in a browser to view the analysis.
+As a result, the program generates an HTML report. You can open the `index.html` file in a browser to view the analysis.
